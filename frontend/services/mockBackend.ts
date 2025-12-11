@@ -1,92 +1,82 @@
 import { Gift, User, USERS, Comment } from '../types';
 
-// Simulating MongoDB + Express endpoints locally
-
-const STORAGE_KEY = 'xmas_wishlist_db_v1';
-
-const getDb = (): { gifts: Gift[] } => {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored) {
-    return JSON.parse(stored);
-  }
-  return { gifts: [] };
-};
-
-const saveDb = (data: { gifts: Gift[] }) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch (e) {
-    alert("¡Memoria llena! Intenta borrar algunos regalos antiguos. (LocalStorage limit reached)");
-  }
-};
+// API Configuration
+const API_URL = import.meta.env.VITE_API_URL || '/api/gifts';
 
 export const api = {
   getUsers: async (): Promise<User[]> => {
-    // Simulate network delay
-    await new Promise(r => setTimeout(r, 300));
+    // Users are still hardcoded in frontend as there is no auth system yet
     return USERS;
   },
 
   getGiftsByUser: async (userId: string): Promise<Gift[]> => {
-    await new Promise(r => setTimeout(r, 300));
-    const db = getDb();
-    return db.gifts
-      .filter(g => g.userId === userId)
-      .sort((a, b) => b.createdAt - a.createdAt);
+    try {
+      const response = await fetch(API_URL);
+      if (!response.ok) throw new Error('Failed to fetch gifts');
+      const allGifts: Gift[] = await response.json();
+
+      // Filter by user locally
+      return allGifts
+        .filter(g => g.userId === userId)
+        // Backend returns date string/object, frontend expects number (timestamp)
+        // or we handle it in the component. Let's normalize here.
+        .map(g => ({
+          ...g,
+          createdAt: new Date(g.createdAt).getTime()
+        }));
+    } catch (error) {
+      console.error("API Error:", error);
+      return [];
+    }
   },
 
   createGift: async (userId: string, imageData: string, title: string, description: string): Promise<Gift> => {
-    await new Promise(r => setTimeout(r, 600)); // Simulate upload time
-    const db = getDb();
-    
-    const newGift: Gift = {
-      id: Date.now().toString(),
+    const payload = {
       userId,
       imageData,
       title,
       description,
-      comments: [],
-      createdAt: Date.now(),
+      comments: []
     };
 
-    db.gifts.push(newGift);
-    saveDb(db);
-    return newGift;
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) throw new Error('Failed to create gift');
+    const newGift = await response.json();
+    return {
+      ...newGift,
+      createdAt: new Date(newGift.createdAt).getTime()
+    };
   },
-  
+
   deleteGift: async (giftId: string): Promise<void> => {
-     await new Promise(r => setTimeout(r, 200));
-     const db = getDb();
-     db.gifts = db.gifts.filter(g => g.id !== giftId);
-     saveDb(db);
+    const response = await fetch(`${API_URL}/${giftId}`, {
+      method: 'DELETE'
+    });
+    if (!response.ok) throw new Error('Failed to delete gift');
   },
 
   addComment: async (giftId: string, userId: string, text: string): Promise<Comment> => {
-    await new Promise(r => setTimeout(r, 200));
-    const db = getDb();
-    const giftIndex = db.gifts.findIndex(g => g.id === giftId);
-    
-    if (giftIndex === -1) throw new Error("Gift not found");
+    const response = await fetch(`${API_URL}/${giftId}/comments`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ userId, text })
+    });
 
-    const newComment: Comment = {
-      id: Date.now().toString(),
-      userId,
-      text,
-      createdAt: Date.now()
-    };
-
-    // Ensure array exists (migration for old data)
-    if (!db.gifts[giftIndex].comments) {
-      db.gifts[giftIndex].comments = [];
-    }
-
-    db.gifts[giftIndex].comments.push(newComment);
-    saveDb(db);
-    return newComment;
+    if (!response.ok) throw new Error('Failed to add comment');
+    return await response.json();
   }
 };
 
-// Helper to resize images before storage to save space (since we are using LocalStorage)
+// Helper function remains useful for image processing
 export const resizeImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

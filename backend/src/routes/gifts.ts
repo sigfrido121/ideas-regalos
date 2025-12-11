@@ -48,6 +48,33 @@ router.patch('/:id', async (req, res) => {
     } catch (error) {
         res.status(400).json({ message: 'Error updating gift', error });
     }
-})
+});
+
+// ADD Comment
+router.post('/:id/comments', async (req, res) => {
+    try {
+        const { userId, text } = req.body;
+        const newComment = {
+            id: Date.now().toString(), // Simple ID generation
+            userId,
+            text,
+            createdAt: Date.now()
+        };
+
+        const gift = await Gift.findByIdAndUpdate(
+            req.params.id,
+            { $push: { comments: newComment } },
+            { new: true }
+        );
+
+        if (!gift) {
+            return res.status(404).json({ message: 'Gift not found' });
+        }
+
+        res.status(201).json(newComment);
+    } catch (error) {
+        res.status(400).json({ message: 'Error adding comment', error });
+    }
+});
 
 export default router;

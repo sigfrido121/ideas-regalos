@@ -1,0 +1,23 @@
+services:
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        GEMINI_API_KEY: ${GEMINI_API_KEY}
+    container_name: ideas-regalos-frontend
+    ports:
+      - "2025:80"
+    depends_on:
+      - backend
+    restart: always
+
+  backend:
+    build: ./backend
+    container_name: ideas-regalos-backend
+    environment:
+      - PORT=5000
+      - MONGODB_URI=${MONGODB_URI}
+    ports:
+      - "5000:5000"
+    restart: always
