@@ -1,55 +1,25 @@
-import { GoogleGenAI } from "@google/genai";
-
-const getAiClient = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    console.error("API Key is missing. Ensure process.env.API_KEY is set.");
-    return null;
-  }
-  return new GoogleGenAI({ apiKey });
-};
+// This service now delegates to the backend for security
+// The backend handles the Gemini API call with the secure API key
 
 export const analyzeGiftImage = async (base64Image: string): Promise<{ title: string; description: string }> => {
-  const ai = getAiClient();
-  if (!ai) {
-    return { title: "Regalo Sorpresa", description: "Descripción no disponible (Falta API Key)" };
-  }
-
   try {
-    // Strip the data:image/jpeg;base64, prefix if present for the API call
-    const cleanBase64 = base64Image.split(',')[1] || base64Image;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType: 'image/jpeg',
-              data: cleanBase64
-            }
-          },
-          {
-            text: `Analiza esta imagen de un posible regalo de navidad. 
-            Responde ÚNICAMENTE con un objeto JSON (sin markdown) con dos propiedades:
-            1. "title": Un título corto y divertido (max 5 palabras).
-            2. "description": Una descripción entusiasta de por qué es un buen regalo (max 20 palabras).
-            Idioma: Español.`
-          }
-        ]
+    // Call the backend endpoint instead of calling Gemini directly from the frontend
+    const response = await fetch('/api/gifts/analyze-image', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
       },
-      config: {
-        responseMimeType: 'application/json'
-      }
+      body: JSON.stringify({ imageData: base64Image })
     });
 
-    const text = response.text;
-    if (!text) throw new Error("No response from AI");
+    if (!response.ok) {
+      throw new Error('Failed to analyze image');
+    }
 
-    const json = JSON.parse(text);
+    const data = await response.json();
     return {
-      title: json.title || "Regalo Genial",
-      description: json.description || "¡Se ve increíble!"
+      title: data.title || "Regalo Genial",
+      description: data.description || "¡Se ve increíble!"
     };
 
   } catch (error) {

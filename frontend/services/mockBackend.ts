@@ -38,17 +38,13 @@ export const api = {
 
   getGiftsByUser: async (userId: string): Promise<Gift[]> => {
     try {
-      const response = await fetch(GIFTS_API_URL);
+      const response = await fetch(GIFTS_API_URL + "?userId=" + userId);
       if (!response.ok) throw new Error('Failed to fetch gifts');
-      const allGifts: Gift[] = await response.json();
-
-      // Filter by user locally
-      return allGifts
-        .filter(g => g.userId === userId)
-        .map(g => ({
-          ...g,
-          createdAt: new Date(g.createdAt).getTime()
-        }));
+      const gifts: Gift[] = await response.json();
+      return gifts.map(g => ({
+        ...g,
+        createdAt: typeof g.createdAt === 'string' ? new Date(g.createdAt).getTime() : g.createdAt
+      }));
     } catch (error) {
       console.error("API Error:", error);
       return [];

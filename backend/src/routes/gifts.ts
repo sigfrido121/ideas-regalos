@@ -1,12 +1,19 @@
 import express from 'express';
 import Gift from '../models/Gift';
+import { generateGiftDescription } from '../services/ai';
+import { randomUUID } from 'crypto';
 
 const router = express.Router();
 
-// GET all gifts
+// GET all gifts or filter by userId
 router.get('/', async (req, res) => {
     try {
-        const gifts = await Gift.find().sort({ createdAt: -1 });
+        const { userId } = req.query;
+        let query = {};
+        if (userId) {
+            query = { userId: userId as string };
+        }
+        const gifts = await Gift.find(query).sort({ createdAt: -1 });
         res.json(gifts);
     } catch (error) {
         res.status(500).json({ message: 'Error fetching gifts', error });
@@ -55,7 +62,7 @@ router.post('/:id/comments', async (req, res) => {
     try {
         const { userId, text } = req.body;
         const newComment = {
-            id: Date.now().toString(), // Simple ID generation
+            id: randomUUID(), // Unique ID generation using UUID
             userId,
             text,
             createdAt: Date.now()
@@ -74,6 +81,20 @@ router.post('/:id/comments', async (req, res) => {
         res.status(201).json(newComment);
     } catch (error) {
         res.status(400).json({ message: 'Error adding comment', error });
+    }
+});
+
+// ANALYZE IMAGE with AI
+router.post('/analyze-image', async (req, res) => {
+    try {
+        const { imageData } = req.body;
+        if (!imageData) {
+            return res.status(400).json({ message: 'Image data is required' });
+        }
+        const result = await generateGiftDescription(imageData);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ message: 'Error analyzing image', error });
     }
 });
 
