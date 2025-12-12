@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import giftRoutes from './routes/gifts';
+import userRoutes from './routes/users';
 
 dotenv.config();
 
@@ -16,6 +17,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Routes
 app.use('/api/gifts', giftRoutes);
+app.use('/api/users', userRoutes);
 
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', message: 'Server is running' });

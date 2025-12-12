@@ -1,25 +1,50 @@
-import { Gift, User, USERS, Comment } from '../types';
+import { Gift, User, Comment } from '../types';
 
 // API Configuration
-const API_URL = import.meta.env.VITE_API_URL || '/api/gifts';
+const USERS_API_URL = '/api/users';
+const GIFTS_API_URL = '/api/gifts';
 
 export const api = {
   getUsers: async (): Promise<User[]> => {
-    // Users are still hardcoded in frontend as there is no auth system yet
-    return USERS;
+    try {
+      const response = await fetch(USERS_API_URL);
+      if (!response.ok) throw new Error('Failed to fetch users');
+      return await response.json();
+    } catch (error) {
+      console.error("API Error (getUsers):", error);
+      return [];
+    }
+  },
+
+  createUser: async (name: string, avatar: string): Promise<User> => {
+    const response = await fetch(USERS_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, avatar })
+    });
+    if (!response.ok) throw new Error('Failed to create user');
+    return await response.json();
+  },
+
+  updateUser: async (userId: string, name: string, avatar: string): Promise<User> => {
+    const response = await fetch(`${USERS_API_URL}/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, avatar })
+    });
+    if (!response.ok) throw new Error('Failed to update user');
+    return await response.json();
   },
 
   getGiftsByUser: async (userId: string): Promise<Gift[]> => {
     try {
-      const response = await fetch(API_URL);
+      const response = await fetch(GIFTS_API_URL);
       if (!response.ok) throw new Error('Failed to fetch gifts');
       const allGifts: Gift[] = await response.json();
 
       // Filter by user locally
       return allGifts
         .filter(g => g.userId === userId)
-        // Backend returns date string/object, frontend expects number (timestamp)
-        // or we handle it in the component. Let's normalize here.
         .map(g => ({
           ...g,
           createdAt: new Date(g.createdAt).getTime()
@@ -39,7 +64,7 @@ export const api = {
       comments: []
     };
 
-    const response = await fetch(API_URL, {
+    const response = await fetch(GIFTS_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -56,14 +81,14 @@ export const api = {
   },
 
   deleteGift: async (giftId: string): Promise<void> => {
-    const response = await fetch(`${API_URL}/${giftId}`, {
+    const response = await fetch(`${GIFTS_API_URL}/${giftId}`, {
       method: 'DELETE'
     });
     if (!response.ok) throw new Error('Failed to delete gift');
   },
 
   addComment: async (giftId: string, userId: string, text: string): Promise<Comment> => {
-    const response = await fetch(`${API_URL}/${giftId}/comments`, {
+    const response = await fetch(`${GIFTS_API_URL}/${giftId}/comments`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -73,6 +98,34 @@ export const api = {
 
     if (!response.ok) throw new Error('Failed to add comment');
     return await response.json();
+  },
+
+  interact: async (giftId: string, userId: string, action: 'like' | 'dislike'): Promise<Gift> => {
+    const response = await fetch(`${GIFTS_API_URL}/${giftId}/interact`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, action })
+    });
+    if (!response.ok) throw new Error('Failed to update interaction');
+    const updatedGift = await response.json();
+    return {
+      ...updatedGift,
+      createdAt: new Date(updatedGift.createdAt).getTime()
+    };
+  },
+
+  updateGift: async (giftId: string, updates: Partial<{ title: string; description: string }>): Promise<Gift> => {
+    const response = await fetch(`${GIFTS_API_URL}/${giftId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates)
+    });
+    if (!response.ok) throw new Error('Failed to update gift');
+    const updatedGift = await response.json();
+    return {
+      ...updatedGift,
+      createdAt: new Date(updatedGift.createdAt).getTime()
+    };
   }
 };
 

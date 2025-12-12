@@ -13,7 +13,9 @@ export interface IGift extends Document {
     description: string;
     imageData: string;
     comments: IComment[];
-    createdAt: Date; // Mongoose handles dates, frontend expects number but Date is fine to serialize
+    likes: number;
+    dislikes: number;
+    createdAt: Date;
 }
 
 const GiftSchema: Schema = new Schema({
@@ -27,6 +29,8 @@ const GiftSchema: Schema = new Schema({
         text: String,
         createdAt: Number
     }],
+    likes: { type: Number, default: 0 },
+    dislikes: { type: Number, default: 0 },
     createdAt: { type: Date, default: Date.now },
 });
 

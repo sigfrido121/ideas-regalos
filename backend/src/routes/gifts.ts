@@ -77,4 +77,32 @@ router.post('/:id/comments', async (req, res) => {
     }
 });
 
+// INTERACT (Like/Dislike)
+router.post('/:id/interact', async (req, res) => {
+    try {
+        const { action } = req.body; // action: 'like' | 'dislike'
+        if (!['like', 'dislike'].includes(action)) {
+            return res.status(400).json({ message: 'Invalid action' });
+        }
+
+        const update = action === 'like'
+            ? { $inc: { likes: 1 } }
+            : { $inc: { dislikes: 1 } };
+
+        const gift = await Gift.findByIdAndUpdate(
+            req.params.id,
+            update,
+            { new: true }
+        );
+
+        if (!gift) {
+            return res.status(404).json({ message: 'Gift not found' });
+        }
+
+        res.json(gift);
+    } catch (error) {
+        res.status(400).json({ message: 'Error updating interaction', error });
+    }
+});
+
 export default router;
