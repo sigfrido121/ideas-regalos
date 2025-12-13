@@ -183,7 +183,7 @@ const ImageGalleryModal: React.FC<{
       >
         <div className="relative max-h-[85vh] w-full flex items-center justify-center">
           <img
-            src={currentGift.imageData}
+            src={currentGift.imageData.startsWith('data:') ? currentGift.imageData : `data:image/jpeg;base64,${currentGift.imageData}`}
             alt={currentGift.title}
             className="max-h-[80vh] max-w-full object-contain rounded-lg shadow-2xl"
             onTouchEnd={(e) => {
@@ -318,7 +318,7 @@ const GiftCard: React.FC<{
         onClick={onImageClick}
       >
         <img
-          src={gift.imageData}
+          src={gift.imageData.startsWith('data:') ? gift.imageData : `data:image/jpeg;base64,${gift.imageData}`}
           alt={gift.title}
           className="w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-110"
         />
@@ -525,12 +525,14 @@ const App: React.FC = () => {
     }
 
     setIsUploading(true);
+
+    // Convert FileList to Array BEFORE clearing input value
+    const fileArray = Array.from(files);
+
     // Reset value to allow uploading same file again
     event.target.value = '';
 
     try {
-      // Convert FileList to Array
-      const fileArray = Array.from(files);
       console.log('Processing files:', fileArray.length);
 
       for (let i = 0; i < fileArray.length; i++) {
