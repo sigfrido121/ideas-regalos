@@ -543,9 +543,23 @@ const App: React.FC = () => {
           const resizedImage = await resizeImage(file);
           console.log(`Resized image ${i}, length:`, resizedImage.length);
 
-          // 2. Send to backend with placeholder text (user can edit manually)
+          // 2. Analyze with AI (Optional, fall back if fails)
+          let title = "Nuevo Regalo";
+          let description = "Toca para editar la descripción";
+
+          try {
+            console.log(`Analyzing image ${i} with AI...`);
+            const aiResult = await analyzeGiftImage(resizedImage);
+            title = aiResult.title;
+            description = aiResult.description;
+            console.log(`AI Result ${i}:`, aiResult);
+          } catch (aiError) {
+            console.error(`AI Analysis failed for file ${i}, using defaults`, aiError);
+          }
+
+          // 3. Send to backend
           console.log(`Uploading file ${i} to backend...`);
-          await api.createGift(selectedUser.id, resizedImage, "Nuevo Regalo", "Toca para editar la descripción");
+          await api.createGift(selectedUser.id, resizedImage, title, description);
           console.log(`File ${i} uploaded successfully`);
         } catch (err) {
           console.error(`Error uploading file ${i}:`, err);

@@ -8,64 +8,79 @@ dotenv.config();
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 export const generateGiftDescription = async (imageBase64: string): Promise<{ title: string, description: string }> => {
-    try {
-        if (!process.env.GEMINI_API_KEY) {
-            console.warn("GEMINI_API_KEY not found, using fallback");
-            return { title: "Regalo Sorpresa", description: "Un regalo misterioso esperando ser abierto." };
-        }
+    if (!process.env.GEMINI_API_KEY) {
+        console.warn("GEMINI_API_KEY not found, using fallback");
+        return { title: "Regalo Sorpresa", description: "Un regalo misterioso esperando ser abierto." };
+    }
 
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // Clean base64 string
+    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
 
-        // Clean base64 string if needed (remove data:image/jpeg;base64, prefix)
-        const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+    const imagePart = {
+        inlineData: {
+            data: base64Data,
+            mimeType: "image/jpeg",
+        },
+    };
 
-        const prompt = `
-      Analiza esta imagen de un regalo navideño y actúa como un asistente navideño divertido y entusiasta.
-      Tu tarea es generar un Título corto y una Descripción atractiva.
-      
-      REGLAS CRÍTICAS:
-      1. PRECIOS: Si ves algún precio o etiqueta de precio en la imagen, IGNÓRALO ABSOLUTAMENTE en el texto. NO menciones números de dinero. Si es muy evidente, haz una broma tipo "Valor: Incalculable (o al menos eso dice la etiqueta borrosa)".
-      2. ESTILO: Sé divertido, usa emojis navideños, sé breve pero descriptivo.
-      3. IDIOMA: Español.
+    const MODES = [
+        { name: "gemini-1.5-flash", json: true },
+        { name: "gemini-1.5-pro", json: true },
+        { name: "gemini-1.5-flash-001", json: true },
+        { name: "gemini-1.5-flash-002", json: true },
+        { name: "gemini-pro-vision", json: false } // Legacy model, no JSON mode
+    ];
 
-      DAME LA RESPUESTA EN FORMATO JSON EXACTO:
-      {
-        "title": "Título corto aquí",
-        "description": "Descripción divertida aquí"
-      }
-    `;
-
-        const imagePart = {
-            inlineData: {
-                data: base64Data,
-                mimeType: "image/jpeg",
-            },
-        };
-
-        const result = await model.generateContent([prompt, imagePart]);
-        const response = await result.response;
-        const text = response.text();
-
-        // Clean markdown code blocks if present
-        const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
-
+    for (const mode of MODES) {
         try {
+            console.log(`Attempting AI analysis with model: ${mode.name}`);
+
+            const modelConfig: any = { model: mode.name };
+            if (mode.json) {
+                modelConfig.generationConfig = { responseMimeType: "application/json" };
+            }
+
+            const model = genAI.getGenerativeModel(modelConfig);
+
+            let prompt = "";
+            if (mode.json) {
+                prompt = `
+                Analiza esta imagen y responde con un objeto JSON (sin markdown) con estas claves:
+                {
+                    "title": "Título corto y divertido (máx 5 palabras)",
+                    "description": "Descripción entusiasta y navideña (máx 20 palabras)"
+                }
+                Ignora precios. Idioma: Español.
+                `;
+            } else {
+                prompt = `
+                Analiza esta imagen de regalo. 
+                Genera un título corto y una descripción divertida en Español.
+                Formato de respuesta: JSON string.
+                `;
+            }
+
+            const result = await model.generateContent([prompt, imagePart]);
+            const response = await result.response;
+            const text = response.text();
+
+            let cleanJson = text;
+            if (!mode.json) {
+                cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+            }
+
             const data = JSON.parse(cleanJson);
             return {
                 title: data.title || "Regalo Navideño",
                 description: data.description || "Un detalle especial para estas fiestas."
             };
-        } catch (e) {
-            console.error("Failed to parse Gemini JSON:", text);
-            return { title: "Error Parseo IA", description: text.slice(0, 100) };
-        }
 
-    } catch (error) {
-        console.error("Error asking Gemini (CRITICAL):", error);
-        if (error instanceof Error) {
-            console.error("Error message:", error.message);
-            console.error("Error stack:", error.stack);
+        } catch (error: any) {
+            console.warn(`Model ${mode.name} failed:`, error.message || error);
+            // Continue to next model
         }
-        return { title: "Error Conexión IA", description: "No se pudo conectar con el cerebro mágico." };
     }
+
+    // If all fail
+    return { title: "Regalo Genial", description: "¡Se ve increíble!" };
 };
