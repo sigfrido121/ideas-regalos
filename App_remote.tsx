@@ -518,48 +518,30 @@ const App: React.FC = () => {
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const inputFiles = event.target.files;
-    console.log('handleFileUpload called', inputFiles);
 
     if (!inputFiles || inputFiles.length === 0 || !selectedUser) {
-      console.log('No files or no user', { files: inputFiles, selectedUser });
       return;
     }
 
-    // CRITICAL FIX: Create a static copy of the files BEFORE clearing the input
-    // because event.target.files is a live reference that empties when value is cleared.
-    const files = Array.from(inputFiles);
-
+    const file = inputFiles[0];
     setIsUploading(true);
     // Reset value to allow uploading same file again
     event.target.value = '';
 
     try {
-      console.log('Processing files (static copy):', files.length);
+      console.log('Processing file:', file.name);
 
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        try {
-          console.log(`Processing file ${i}:`, file.name);
-          // 1. Resize/Compress Image on client side
-          const resizedImage = await resizeImage(file);
-          console.log(`Resized image ${i}, length:`, resizedImage.length);
+      // 1. Resize/Compress Image on client side
+      const resizedImage = await resizeImage(file);
 
-          // 2. Send to backend with placeholder text (user can edit manually)
-          console.log(`Uploading file ${i} to backend...`);
-          await api.createGift(selectedUser.id, resizedImage, "Nuevo Regalo", "Toca para editar la descripción");
-          console.log(`File ${i} uploaded successfully`);
-        } catch (err) {
-          console.error(`Error uploading file ${i}:`, err);
-        }
-      }
+      // 2. Send to backend
+      await api.createGift(selectedUser.id, resizedImage, "Nuevo Regalo", "Toca para editar la descripción");
 
-      // 3. Refresh list after all uploads or partial uploads
-      console.log('Refreshing gift list...');
+      // 3. Refresh list
       await loadGifts(selectedUser.id);
-      console.log('Gift list refreshed');
     } catch (error) {
-      console.error("Batch upload failed", error);
-      alert("Error al subir las imágenes.");
+      console.error("Upload failed", error);
+      alert("Error al subir la imagen.");
     } finally {
       setIsUploading(false);
     }
@@ -663,7 +645,6 @@ const App: React.FC = () => {
               <input
                 type="file"
                 accept="image/*"
-                multiple
                 onChange={handleFileUpload}
                 className="hidden"
                 id="gift-upload"
