@@ -42,11 +42,11 @@ docker compose -f docker-compose.prod.yml up -d --build
 Ingress en `/mnt/miDisco/infra/cloudflared/config.yml`:
 
 ```yaml
-- hostname: regalitos.elchuloflaco.org
+- hostname: regalos.elchuloflaco.org
   service: http://ideas-regalos-web:80
 ```
 
-Y un CNAME proxied: `regalitos` → `e24163fb-efef-4deb-a8bb-5700f0af6271.cfargotunnel.com`.
+Y un CNAME proxied: `regalos` → `e24163fb-efef-4deb-a8bb-5700f0af6271.cfargotunnel.com`.
 
 ## Comprobar
 
