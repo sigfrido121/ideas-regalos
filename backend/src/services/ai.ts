@@ -4,83 +4,64 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Initialize Gemini
+// La clave vive solo en el servidor
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
-export const generateGiftDescription = async (imageBase64: string): Promise<{ title: string, description: string }> => {
+// Modelos con visión, en orden de preferencia (los 1.5 ya no existen)
+const MODELS = [
+    'gemini-3.8-flash',
+    'gemini-2.5-flash',
+    'gemini-flash-latest',
+];
+
+const PROMPT = `
+Analiza la imagen de este regalo y responde SOLO con un objeto JSON válido (sin markdown, sin texto extra):
+{
+  "title": "Título corto y divertido (máx 5 palabras)",
+  "description": "Descripción entusiasta y navideña (máx 20 palabras)"
+}
+Ignora precios, marcas de agua y texto promocional. Idioma: español.
+`;
+
+const detectMime = (b64: string): string => {
+    if (b64.startsWith('/9j/')) return 'image/jpeg';
+    if (b64.startsWith('iVBOR')) return 'image/png';
+    if (b64.startsWith('R0lGOD')) return 'image/gif';
+    if (b64.startsWith('UklGR')) return 'image/webp';
+    return 'image/jpeg';
+};
+
+export const generateGiftDescription = async (imageBase64: string): Promise<{ title: string, description: string, ai: boolean }> => {
+    const fallback = { title: 'Regalo Sorpresa', description: 'Un regalo misterioso esperando ser abierto.', ai: false };
+
     if (!process.env.GEMINI_API_KEY) {
-        console.warn("GEMINI_API_KEY not found, using fallback");
-        return { title: "Regalo Sorpresa", description: "Un regalo misterioso esperando ser abierto." };
+        console.warn('GEMINI_API_KEY no configurada: usando fallback');
+        return fallback;
     }
 
-    // Clean base64 string
-    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+    const imagePart = { inlineData: { data: base64Data, mimeType: detectMime(base64Data) } };
 
-    const imagePart = {
-        inlineData: {
-            data: base64Data,
-            mimeType: "image/jpeg",
-        },
-    };
-
-    const MODES = [
-        { name: "gemini-1.5-flash", json: true },
-        { name: "gemini-1.5-pro", json: true },
-        { name: "gemini-1.5-flash-001", json: true },
-        { name: "gemini-1.5-flash-002", json: true },
-        { name: "gemini-pro-vision", json: false } // Legacy model, no JSON mode
-    ];
-
-    for (const mode of MODES) {
+    for (const modelName of MODELS) {
         try {
-            console.log(`Attempting AI analysis with model: ${mode.name}`);
-
-            const modelConfig: any = { model: mode.name };
-            if (mode.json) {
-                modelConfig.generationConfig = { responseMimeType: "application/json" };
-            }
-
-            const model = genAI.getGenerativeModel(modelConfig);
-
-            let prompt = "";
-            if (mode.json) {
-                prompt = `
-                Analiza esta imagen y responde con un objeto JSON (sin markdown) con estas claves:
-                {
-                    "title": "Título corto y divertido (máx 5 palabras)",
-                    "description": "Descripción entusiasta y navideña (máx 20 palabras)"
-                }
-                Ignora precios. Idioma: Español.
-                `;
-            } else {
-                prompt = `
-                Analiza esta imagen de regalo. 
-                Genera un título corto y una descripción divertida en Español.
-                Formato de respuesta: JSON string.
-                `;
-            }
-
-            const result = await model.generateContent([prompt, imagePart]);
-            const response = await result.response;
-            const text = response.text();
-
-            let cleanJson = text;
-            if (!mode.json) {
-                cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
-            }
-
-            const data = JSON.parse(cleanJson);
+            const model = genAI.getGenerativeModel({
+                model: modelName,
+                generationConfig: { responseMimeType: 'application/json', temperature: 0.9 },
+            });
+            const result = await model.generateContent([PROMPT, imagePart]);
+            const text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
+            const data = JSON.parse(text);
+            if (!data.title) throw new Error('respuesta sin título');
+            console.log(`IA OK con ${modelName}: ${data.title}`);
             return {
-                title: data.title || "Regalo Navideño",
-                description: data.description || "Un detalle especial para estas fiestas."
+                title: String(data.title).slice(0, 60),
+                description: String(data.description || 'Un detalle especial para estas fiestas.').slice(0, 160),
+                ai: true,
             };
-
         } catch (error: any) {
-            console.warn(`Model ${mode.name} failed:`, error.message || error);
-            // Continue to next model
+            console.warn(`Modelo ${modelName} falló:`, error?.message || error);
         }
     }
 
-    // If all fail
-    return { title: "Regalo Genial", description: "¡Se ve increíble!" };
+    return { ...fallback, title: 'Regalo Genial' };
 };

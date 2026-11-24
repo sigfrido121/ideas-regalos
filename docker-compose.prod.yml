@@ -1,0 +1,43 @@
+name: ideas-regalos
+
+services:
+  db:
+    image: mongo:7
+    container_name: ideas-regalos-db
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - internal
+
+  backend:
+    build: ./backend
+    container_name: ideas-regalos-backend
+    restart: unless-stopped
+    environment:
+      - PORT=5000
+      - MONGODB_URI=mongodb://db:27017/regalos
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      - db
+    networks:
+      - internal
+
+  web:
+    build: ./frontend
+    container_name: ideas-regalos-web
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - internal
+      - cloudflare
+
+volumes:
+  mongo-data:
+
+networks:
+  internal:
+  cloudflare:
+    external: true
+    name: ngnx-cloudflare_internal

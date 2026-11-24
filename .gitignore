@@ -1,7 +1,14 @@
+# dependencias y builds
 node_modules/
 dist/
-.env
 *.log
-.DS_Store
+
+# secretos (nunca al repo)
+.env
+.env.*
 vps_key
+*.pem
+
+# sistema
+.DS_Store
 .gemini/
