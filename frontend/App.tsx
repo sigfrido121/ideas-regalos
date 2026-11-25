@@ -464,6 +464,92 @@ const HighlightCard: React.FC<{
   </button>
 );
 
+const UploadHintModal: React.FC<{
+  files: File[];
+  onCancel: () => void;
+  onSubmit: (hint: string) => void;
+}> = ({ files, onCancel, onSubmit }) => {
+  // El estado vive acá adentro: así escribir no re-renderiza el árbol de App
+  // (si viviera arriba, cada tecla remontaba el modal y se cerraba el teclado).
+  const [hint, setHint] = useState('');
+  const [previews, setPreviews] = useState<string[]>([]);
+
+  useEffect(() => {
+    const urls = files.slice(0, 3).map((f) => URL.createObjectURL(f));
+    setPreviews(urls);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = '';
+      urls.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [files]);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[70] flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm">
+      <div className="bg-white rounded-t-3xl sm:rounded-2xl p-5 sm:p-6 w-full sm:max-w-md shadow-2xl max-h-[92vh] overflow-y-auto pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-festive text-2xl text-xmas-red">Antes de subir</h3>
+          <div className="flex items-center gap-1">
+            <span className="text-xs font-medium text-slate-400 bg-slate-100 px-2 py-1 rounded-full">
+              {files.length === 1 ? '1 foto' : `${files.length} fotos`}
+            </span>
+            <button onClick={onCancel} aria-label="Cerrar" className="p-2 text-slate-400 hover:text-slate-600 rounded-full">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        </div>
+
+        {previews.length > 0 && (
+          <div className="flex gap-2 mt-2 mb-4">
+            {previews.map((src, i) => (
+              <img key={src} src={src} alt={`Vista previa ${i + 1}`} className="w-16 h-16 object-cover rounded-xl border border-slate-200" />
+            ))}
+            {files.length > previews.length && (
+              <div className="w-16 h-16 rounded-xl bg-slate-100 text-slate-500 text-sm font-bold flex items-center justify-center">
+                +{files.length - previews.length}
+              </div>
+            )}
+          </div>
+        )}
+
+        <p className="text-sm text-slate-500 mb-3">
+          Sumá un detalle si querés (marca, talle, para quién es) y la IA lo usa para el título y la descripción.
+        </p>
+
+        <label htmlFor="upload-hint" className="block text-sm font-medium text-slate-700 mb-1">
+          Descripción opcional
+        </label>
+        <textarea
+          id="upload-hint"
+          value={hint}
+          onChange={(e) => setHint(e.target.value)}
+          maxLength={300}
+          rows={3}
+          enterKeyHint="done"
+          placeholder="Ej: zapatillas de running talla 43"
+          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-xmas-green text-base sm:text-sm resize-none"
+        />
+        <p className="text-[11px] text-slate-400 text-right mt-1 mb-3">{hint.length}/300</p>
+
+        <div className="flex gap-2 mt-1">
+          <button
+            onClick={onCancel}
+            className="flex-1 py-3 border border-slate-200 text-slate-600 font-medium hover:bg-slate-50 rounded-xl transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={() => onSubmit(hint.trim())}
+            className="flex-[1.4] py-3 bg-xmas-green text-white font-semibold rounded-xl hover:bg-green-700 transition-colors"
+          >
+            {files.length > 1 ? `Subir ${files.length} fotos` : 'Subir foto'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const App: React.FC = () => {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isEditingUser, setIsEditingUser] = useState(false);
@@ -474,26 +560,9 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [highlights, setHighlights] = useState<{ recent: Gift[]; popular: Gift[] }>({ recent: [], popular: [] });
-  const [homeGallery, setHomeGallery] = useState<{ gifts: Gift[]; index: number } | null>(null);
+  const [giftToOpen, setGiftToOpen] = useState<string | null>(null);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
-  const [uploadHint, setUploadHint] = useState('');
   const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
-  const [previews, setPreviews] = useState<string[]>([]);
-
-  // Miniaturas de lo que se va a subir + bloqueo del scroll de fondo mientras el modal está abierto
-  useEffect(() => {
-    if (pendingFiles.length === 0) {
-      setPreviews([]);
-      return;
-    }
-    document.body.style.overflow = 'hidden';
-    const urls = pendingFiles.slice(0, 3).map((f) => URL.createObjectURL(f));
-    setPreviews(urls);
-    return () => {
-      document.body.style.overflow = '';
-      urls.forEach((u) => URL.revokeObjectURL(u));
-    };
-  }, [pendingFiles]);
 
   const fetchHighlights = async () => {
     const data = await api.getHighlights(8);
@@ -507,6 +576,14 @@ const App: React.FC = () => {
   }, []);
 
   const userById = (id: string) => users.find((u) => u.id === id);
+
+  // Pulso en un destacado: abrir el perfil del dueño con ese regalo a la vista
+  const openGiftInProfile = (gift: Gift) => {
+    const owner = userById(gift.userId);
+    if (!owner) return;
+    setGiftToOpen(gift.id);
+    setSelectedUser(owner);
+  };
 
   const fetchUsers = async () => {
     const data = await api.getUsers();
@@ -533,6 +610,13 @@ const App: React.FC = () => {
 
     setGifts(data);
     setIsLoading(false);
+
+    // Si venimos de un destacado del inicio, abrimos ese regalo en la galería del perfil
+    if (giftToOpen) {
+      const idx = data.findIndex((g) => g.id === giftToOpen);
+      if (idx >= 0) setSelectedImageIndex(idx);
+      setGiftToOpen(null);
+    }
   };
 
   const handleUpdateUser = async (name: string, avatar: string) => {
@@ -586,7 +670,6 @@ const App: React.FC = () => {
     const fileArray = Array.from(files);
     // Reset value to allow uploading the same file again
     event.target.value = '';
-    setUploadHint('');
     setPendingFiles(fileArray);
   };
 
@@ -625,7 +708,6 @@ const App: React.FC = () => {
       await loadGifts(selectedUser.id);
       await fetchHighlights();
       setPendingFiles([]);
-      setUploadHint('');
     } catch (error) {
       console.error("Batch upload failed", error);
       alert("Error al subir las imágenes.");
@@ -703,7 +785,7 @@ const App: React.FC = () => {
                 gift={gift}
                 user={userById(gift.userId)}
                 badge="Nuevo"
-                onClick={() => setHomeGallery({ gifts: highlights.recent, index })}
+                onClick={() => openGiftInProfile(gift)}
               />
             ))}
           </div>
@@ -723,7 +805,7 @@ const App: React.FC = () => {
                 gift={gift}
                 user={userById(gift.userId)}
                 badge={index === 0 ? '🔥 Top 1' : `#${index + 1}`}
-                onClick={() => setHomeGallery({ gifts: highlights.popular, index })}
+                onClick={() => openGiftInProfile(gift)}
               />
             ))}
           </div>
@@ -731,14 +813,6 @@ const App: React.FC = () => {
       )}
 
       <p className="text-white/80 mt-8 font-festive text-xl text-center">🎄 Feliz Navidad y Próspero Año Nuevo 🎄</p>
-
-      {homeGallery && (
-        <ImageGalleryModal
-          gifts={homeGallery.gifts}
-          initialIndex={homeGallery.index}
-          onClose={() => setHomeGallery(null)}
-        />
-      )}
     </div>
   );
 
@@ -861,78 +935,15 @@ const App: React.FC = () => {
         </main>
 
         {pendingFiles.length > 0 && (
-          <div className="fixed inset-0 bg-black/60 z-[70] flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm">
-            <div className="bg-white rounded-t-3xl sm:rounded-2xl p-5 sm:p-6 w-full sm:max-w-md shadow-2xl max-h-[92vh] overflow-y-auto pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="font-festive text-2xl text-xmas-red">Antes de subir</h3>
-                <div className="flex items-center gap-1">
-                  <span className="text-xs font-medium text-slate-400 bg-slate-100 px-2 py-1 rounded-full">
-                    {pendingFiles.length === 1 ? '1 foto' : `${pendingFiles.length} fotos`}
-                  </span>
-                  <button
-                    onClick={() => { setPendingFiles([]); setUploadHint(''); }}
-                    aria-label="Cerrar"
-                    className="p-2 text-slate-400 hover:text-slate-600 rounded-full"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                  </button>
-                </div>
-              </div>
-
-              {previews.length > 0 && (
-                <div className="flex gap-2 mt-2 mb-4">
-                  {previews.map((src, i) => (
-                    <img key={src} src={src} alt={`Vista previa ${i + 1}`} className="w-16 h-16 object-cover rounded-xl border border-slate-200" />
-                  ))}
-                  {pendingFiles.length > previews.length && (
-                    <div className="w-16 h-16 rounded-xl bg-slate-100 text-slate-500 text-sm font-bold flex items-center justify-center">
-                      +{pendingFiles.length - previews.length}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              <p className="text-sm text-slate-500 mb-3">
-                Sumá un detalle si querés (marca, talle, para quién es) y la IA lo usa para el título y la descripción.
-              </p>
-
-              <label htmlFor="upload-hint" className="block text-sm font-medium text-slate-700 mb-1">
-                Descripción opcional
-              </label>
-              <textarea
-                id="upload-hint"
-                value={uploadHint}
-                onChange={(e) => setUploadHint(e.target.value)}
-                maxLength={300}
-                rows={3}
-                enterKeyHint="done"
-                placeholder="Ej: zapatillas de running talla 43"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-xmas-green text-base sm:text-sm resize-none"
-              />
-              <p className="text-[11px] text-slate-400 text-right mt-1 mb-3">{uploadHint.length}/300</p>
-
-              <div className="flex gap-2 mt-1">
-                <button
-                  onClick={() => { setPendingFiles([]); setUploadHint(''); }}
-                  className="flex-1 py-3 border border-slate-200 text-slate-600 font-medium hover:bg-slate-50 rounded-xl transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => {
-                    const files = pendingFiles;
-                    const hint = uploadHint.trim();
-                    setPendingFiles([]);
-                    setUploadHint('');
-                    uploadFiles(files, hint);
-                  }}
-                  className="flex-[1.4] py-3 bg-xmas-green text-white font-semibold rounded-xl hover:bg-green-700 transition-colors"
-                >
-                  {pendingFiles.length > 1 ? `Subir ${pendingFiles.length} fotos` : 'Subir foto'}
-                </button>
-              </div>
-            </div>
-          </div>
+          <UploadHintModal
+            files={pendingFiles}
+            onCancel={() => setPendingFiles([])}
+            onSubmit={(hint) => {
+              const files = pendingFiles;
+              setPendingFiles([]);
+              uploadFiles(files, hint);
+            }}
+          />
         )}
 
         {selectedImageIndex !== null && (
