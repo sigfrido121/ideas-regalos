@@ -120,11 +120,11 @@ router.post('/:id/comments', async (req, res) => {
 // ANALYZE IMAGE with AI
 router.post('/analyze-image', async (req, res) => {
     try {
-        const { imageData } = req.body;
+        const { imageData, hint } = req.body;
         if (!imageData) {
             return res.status(400).json({ message: 'Image data is required' });
         }
-        const result = await generateGiftDescription(imageData);
+        const result = await generateGiftDescription(imageData, typeof hint === 'string' ? hint : undefined);
         res.json(result);
     } catch (error) {
         res.status(500).json({ message: 'Error analyzing image', error });

@@ -23,6 +23,13 @@ Analiza la imagen de este regalo y responde SOLO con un objeto JSON válido (sin
 Ignora precios, marcas de agua y texto promocional. Idioma: español.
 `;
 
+const buildPrompt = (hint?: string): string => {
+    const clean = (hint || '').trim().slice(0, 300);
+    if (!clean) return PROMPT;
+    return `${PROMPT}
+Dato extra que aporta la persona que sube la foto (usalo para precisar el título y la descripción; no lo contradigas ni lo repitas literal): "${clean}"`;
+};
+
 const detectMime = (b64: string): string => {
     if (b64.startsWith('/9j/')) return 'image/jpeg';
     if (b64.startsWith('iVBOR')) return 'image/png';
@@ -31,7 +38,7 @@ const detectMime = (b64: string): string => {
     return 'image/jpeg';
 };
 
-export const generateGiftDescription = async (imageBase64: string): Promise<{ title: string, description: string, ai: boolean }> => {
+export const generateGiftDescription = async (imageBase64: string, hint?: string): Promise<{ title: string, description: string, ai: boolean }> => {
     const fallback = { title: 'Regalo Sorpresa', description: 'Un regalo misterioso esperando ser abierto.', ai: false };
 
     if (!process.env.GEMINI_API_KEY) {
@@ -48,7 +55,7 @@ export const generateGiftDescription = async (imageBase64: string): Promise<{ ti
                 model: modelName,
                 generationConfig: { responseMimeType: 'application/json', temperature: 0.9 },
             });
-            const result = await model.generateContent([PROMPT, imagePart]);
+            const result = await model.generateContent([buildPrompt(hint), imagePart]);
             const text = result.response.text().replace(/```json/g, '').replace(/```/g, '').trim();
             const data = JSON.parse(text);
             if (!data.title) throw new Error('respuesta sin título');

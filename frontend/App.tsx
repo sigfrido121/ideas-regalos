@@ -475,6 +475,8 @@ const App: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [highlights, setHighlights] = useState<{ recent: Gift[]; popular: Gift[] }>({ recent: [], popular: [] });
   const [homeGallery, setHomeGallery] = useState<{ gifts: Gift[]; index: number } | null>(null);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [uploadHint, setUploadHint] = useState('');
 
   const fetchHighlights = async () => {
     const data = await api.getHighlights(8);
@@ -561,60 +563,50 @@ const App: React.FC = () => {
     }
   }
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    console.log('handleFileUpload called', files);
-    if (!files || files.length === 0 || !selectedUser) {
-      console.log('No files or no user', { files, selectedUser });
-      return;
-    }
+    if (!files || files.length === 0 || !selectedUser) return;
+    const fileArray = Array.from(files);
+    // Reset value to allow uploading the same file again
+    event.target.value = '';
+    setUploadHint('');
+    setPendingFiles(fileArray);
+  };
 
+  const uploadFiles = async (fileArray: File[], hint: string) => {
+    if (!selectedUser) return;
     setIsUploading(true);
 
-    // Convert FileList to Array BEFORE clearing input value
-    const fileArray = Array.from(files);
-
-    // Reset value to allow uploading same file again
-    event.target.value = '';
-
     try {
-      console.log('Processing files:', fileArray.length);
-
       for (let i = 0; i < fileArray.length; i++) {
         const file = fileArray[i] as File;
         try {
-          console.log(`Processing file ${i}:`, file.name);
           // 1. Resize/Compress Image on client side
           const resizedImage = await resizeImage(file);
-          console.log(`Resized image ${i}, length:`, resizedImage.length);
 
-          // 2. Analyze with AI (Optional, fall back if fails)
+          // 2. Analyze with AI, passing the optional hint
           let title = "Nuevo Regalo";
           let description = "Toca para editar la descripción";
 
           try {
-            console.log(`Analyzing image ${i} with AI...`);
-            const aiResult = await analyzeGiftImage(resizedImage);
+            const aiResult = await analyzeGiftImage(resizedImage, hint);
             title = aiResult.title;
             description = aiResult.description;
-            console.log(`AI Result ${i}:`, aiResult);
           } catch (aiError) {
             console.error(`AI Analysis failed for file ${i}, using defaults`, aiError);
           }
 
           // 3. Send to backend
-          console.log(`Uploading file ${i} to backend...`);
           await api.createGift(selectedUser.id, resizedImage, title, description);
-          console.log(`File ${i} uploaded successfully`);
         } catch (err) {
           console.error(`Error uploading file ${i}:`, err);
         }
       }
 
-      // 3. Refresh list after all uploads or partial uploads
-      console.log('Refreshing gift list...');
       await loadGifts(selectedUser.id);
-      console.log('Gift list refreshed');
+      await fetchHighlights();
+      setPendingFiles([]);
+      setUploadHint('');
     } catch (error) {
       console.error("Batch upload failed", error);
       alert("Error al subir las imágenes.");
@@ -771,7 +763,7 @@ const App: React.FC = () => {
                 type="file"
                 accept="image/*"
                 multiple
-                onChange={handleFileUpload}
+                onChange={handleFileSelect}
                 className="hidden"
                 id="gift-upload"
                 disabled={isUploading}
@@ -845,6 +837,43 @@ const App: React.FC = () => {
             )}
           </section>
         </main>
+
+        {pendingFiles.length > 0 && (
+          <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
+              <h3 className="font-festive text-2xl text-xmas-red mb-1">Antes de subir</h3>
+              <p className="text-sm text-slate-500 mb-4">
+                {pendingFiles.length === 1 ? 'Una foto lista' : `${pendingFiles.length} fotos listas`}.
+                Si querés, sumá un detalle y la IA lo usa para el título y la descripción.
+              </p>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Descripción opcional</label>
+              <textarea
+                value={uploadHint}
+                onChange={(e) => setUploadHint(e.target.value)}
+                maxLength={300}
+                rows={3}
+                autoFocus
+                placeholder="Ej: zapatillas de running talla 43, o 'para el cumple de Vero'"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-xmas-green text-sm resize-none"
+              />
+              <p className="text-[11px] text-slate-400 text-right mt-1">{uploadHint.length}/300</p>
+              <div className="flex gap-3 mt-2">
+                <button
+                  onClick={() => { setPendingFiles([]); setUploadHint(''); }}
+                  className="flex-1 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => uploadFiles(pendingFiles, uploadHint.trim())}
+                  className="flex-1 py-2 bg-xmas-green text-white font-medium rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  {pendingFiles.length > 1 ? `Subir ${pendingFiles.length} fotos` : 'Subir foto'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {selectedImageIndex !== null && (
           <ImageGalleryModal

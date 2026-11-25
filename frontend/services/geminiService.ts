@@ -1,7 +1,7 @@
 // This service now delegates to the backend for security
 // The backend handles the Gemini API call with the secure API key
 
-export const analyzeGiftImage = async (base64Image: string): Promise<{ title: string; description: string }> => {
+export const analyzeGiftImage = async (base64Image: string, hint?: string): Promise<{ title: string; description: string }> => {
   try {
     // Call the backend endpoint instead of calling Gemini directly from the frontend
     const response = await fetch('/api/gifts/analyze-image', {
@@ -9,7 +9,7 @@ export const analyzeGiftImage = async (base64Image: string): Promise<{ title: st
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ imageData: base64Image })
+      body: JSON.stringify({ imageData: base64Image, hint })
     });
 
     if (!response.ok) {
