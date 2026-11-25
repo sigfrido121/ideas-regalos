@@ -934,18 +934,6 @@ const App: React.FC = () => {
           </section>
         </main>
 
-        {pendingFiles.length > 0 && (
-          <UploadHintModal
-            files={pendingFiles}
-            onCancel={() => setPendingFiles([])}
-            onSubmit={(hint) => {
-              const files = pendingFiles;
-              setPendingFiles([]);
-              uploadFiles(files, hint);
-            }}
-          />
-        )}
-
         {selectedImageIndex !== null && (
           <ImageGalleryModal
             gifts={gifts}
@@ -957,7 +945,23 @@ const App: React.FC = () => {
     );
   };
 
-  return selectedUser ? <DashboardPage /> : <LandingPage />;
+  return (
+    <>
+      {selectedUser ? <DashboardPage /> : <LandingPage />}
+      {/* Fuera de DashboardPage: si vive adentro, cada render de App lo remonta y el teclado se cierra */}
+      {pendingFiles.length > 0 && (
+        <UploadHintModal
+          files={pendingFiles}
+          onCancel={() => setPendingFiles([])}
+          onSubmit={(hint) => {
+            const files = pendingFiles;
+            setPendingFiles([]);
+            uploadFiles(files, hint);
+          }}
+        />
+      )}
+    </>
+  );
 };
 
 export default App;
