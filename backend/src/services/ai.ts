@@ -9,9 +9,9 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 // Modelos con visión, en orden de preferencia (los 1.5 ya no existen)
 const MODELS = [
-    'gemini-3.8-flash',
     'gemini-2.5-flash',
-    'gemini-flash-latest',
+    'gemini-flash-lite-latest',
+    'gemini-3.8-flash',
 ];
 
 const PROMPT = `

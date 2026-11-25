@@ -477,6 +477,23 @@ const App: React.FC = () => {
   const [homeGallery, setHomeGallery] = useState<{ gifts: Gift[]; index: number } | null>(null);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [uploadHint, setUploadHint] = useState('');
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null);
+  const [previews, setPreviews] = useState<string[]>([]);
+
+  // Miniaturas de lo que se va a subir + bloqueo del scroll de fondo mientras el modal está abierto
+  useEffect(() => {
+    if (pendingFiles.length === 0) {
+      setPreviews([]);
+      return;
+    }
+    document.body.style.overflow = 'hidden';
+    const urls = pendingFiles.slice(0, 3).map((f) => URL.createObjectURL(f));
+    setPreviews(urls);
+    return () => {
+      document.body.style.overflow = '';
+      urls.forEach((u) => URL.revokeObjectURL(u));
+    };
+  }, [pendingFiles]);
 
   const fetchHighlights = async () => {
     const data = await api.getHighlights(8);
@@ -576,6 +593,7 @@ const App: React.FC = () => {
   const uploadFiles = async (fileArray: File[], hint: string) => {
     if (!selectedUser) return;
     setIsUploading(true);
+    setUploadProgress({ done: 0, total: fileArray.length });
 
     try {
       for (let i = 0; i < fileArray.length; i++) {
@@ -601,6 +619,7 @@ const App: React.FC = () => {
         } catch (err) {
           console.error(`Error uploading file ${i}:`, err);
         }
+        setUploadProgress({ done: i + 1, total: fileArray.length });
       }
 
       await loadGifts(selectedUser.id);
@@ -612,6 +631,7 @@ const App: React.FC = () => {
       alert("Error al subir las imágenes.");
     } finally {
       setIsUploading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -775,9 +795,11 @@ const App: React.FC = () => {
                       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-xmas-red"></div>
                       <div className="space-y-1">
                         <h3 className="text-xl font-bold text-slate-800">
-                          Subiendo imágenes...
+                          {uploadProgress && uploadProgress.total > 1
+                            ? `Subiendo ${uploadProgress.done + 1 > uploadProgress.total ? uploadProgress.total : uploadProgress.done + 1} de ${uploadProgress.total}...`
+                            : 'Subiendo imagen...'}
                         </h3>
-                        <p className="text-slate-500">Por favor espera un momento</p>
+                        <p className="text-slate-500">La IA está pensando el título y la descripción</p>
                       </div>
                     </>
                   ) : (
@@ -839,34 +861,72 @@ const App: React.FC = () => {
         </main>
 
         {pendingFiles.length > 0 && (
-          <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
-              <h3 className="font-festive text-2xl text-xmas-red mb-1">Antes de subir</h3>
-              <p className="text-sm text-slate-500 mb-4">
-                {pendingFiles.length === 1 ? 'Una foto lista' : `${pendingFiles.length} fotos listas`}.
-                Si querés, sumá un detalle y la IA lo usa para el título y la descripción.
+          <div className="fixed inset-0 bg-black/60 z-[70] flex items-end sm:items-center justify-center sm:p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-t-3xl sm:rounded-2xl p-5 sm:p-6 w-full sm:max-w-md shadow-2xl max-h-[92vh] overflow-y-auto pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="font-festive text-2xl text-xmas-red">Antes de subir</h3>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs font-medium text-slate-400 bg-slate-100 px-2 py-1 rounded-full">
+                    {pendingFiles.length === 1 ? '1 foto' : `${pendingFiles.length} fotos`}
+                  </span>
+                  <button
+                    onClick={() => { setPendingFiles([]); setUploadHint(''); }}
+                    aria-label="Cerrar"
+                    className="p-2 text-slate-400 hover:text-slate-600 rounded-full"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              </div>
+
+              {previews.length > 0 && (
+                <div className="flex gap-2 mt-2 mb-4">
+                  {previews.map((src, i) => (
+                    <img key={src} src={src} alt={`Vista previa ${i + 1}`} className="w-16 h-16 object-cover rounded-xl border border-slate-200" />
+                  ))}
+                  {pendingFiles.length > previews.length && (
+                    <div className="w-16 h-16 rounded-xl bg-slate-100 text-slate-500 text-sm font-bold flex items-center justify-center">
+                      +{pendingFiles.length - previews.length}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <p className="text-sm text-slate-500 mb-3">
+                Sumá un detalle si querés (marca, talle, para quién es) y la IA lo usa para el título y la descripción.
               </p>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Descripción opcional</label>
+
+              <label htmlFor="upload-hint" className="block text-sm font-medium text-slate-700 mb-1">
+                Descripción opcional
+              </label>
               <textarea
+                id="upload-hint"
                 value={uploadHint}
                 onChange={(e) => setUploadHint(e.target.value)}
                 maxLength={300}
                 rows={3}
-                autoFocus
-                placeholder="Ej: zapatillas de running talla 43, o 'para el cumple de Vero'"
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-xmas-green text-sm resize-none"
+                enterKeyHint="done"
+                placeholder="Ej: zapatillas de running talla 43"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-xmas-green text-base sm:text-sm resize-none"
               />
-              <p className="text-[11px] text-slate-400 text-right mt-1">{uploadHint.length}/300</p>
-              <div className="flex gap-3 mt-2">
+              <p className="text-[11px] text-slate-400 text-right mt-1 mb-3">{uploadHint.length}/300</p>
+
+              <div className="flex gap-2 mt-1">
                 <button
                   onClick={() => { setPendingFiles([]); setUploadHint(''); }}
-                  className="flex-1 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors"
+                  className="flex-1 py-3 border border-slate-200 text-slate-600 font-medium hover:bg-slate-50 rounded-xl transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
-                  onClick={() => uploadFiles(pendingFiles, uploadHint.trim())}
-                  className="flex-1 py-2 bg-xmas-green text-white font-medium rounded-lg hover:bg-green-700 transition-colors"
+                  onClick={() => {
+                    const files = pendingFiles;
+                    const hint = uploadHint.trim();
+                    setPendingFiles([]);
+                    setUploadHint('');
+                    uploadFiles(files, hint);
+                  }}
+                  className="flex-[1.4] py-3 bg-xmas-green text-white font-semibold rounded-xl hover:bg-green-700 transition-colors"
                 >
                   {pendingFiles.length > 1 ? `Subir ${pendingFiles.length} fotos` : 'Subir foto'}
                 </button>
