@@ -40,6 +40,16 @@ tar xzf /mnt/miDisco/backups/ideas-regalos/2026-11-24/ideas-regalos-app.tar.gz
 cd ideas-regalos && docker compose -f docker-compose.prod.yml up -d --build
 ```
 
+## Copias automáticas
+
+`/mnt/miDisco/apps/ideas-regalos/backup.sh` hace un `mongodump` de la base `regalos` a
+`/mnt/miDisco/backups/ideas-regalos/daily/` y rota a 30 días. Corre por cron todos los días a las 04:00
+(log en `/mnt/miDisco/backups/ideas-regalos/backup.log`).
+
+```bash
+/mnt/miDisco/apps/ideas-regalos/backup.sh   # copia manual
+```
+
 ## Comprobar
 
 ```bash
