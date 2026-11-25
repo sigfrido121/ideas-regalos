@@ -429,6 +429,41 @@ const GiftCard: React.FC<{
   );
 };
 
+const HighlightCard: React.FC<{
+  gift: Gift;
+  user?: User;
+  badge?: string;
+  onClick: () => void;
+}> = ({ gift, user, badge, onClick }) => (
+  <button
+    onClick={onClick}
+    className="group bg-white rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-all text-left border border-white/60 active:scale-[0.98]"
+  >
+    <div className="relative aspect-square bg-slate-100 overflow-hidden">
+      <img
+        src={gift.imageData.startsWith('data:') ? gift.imageData : `data:image/jpeg;base64,${gift.imageData}`}
+        alt={gift.title}
+        loading="lazy"
+        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+      />
+      {badge && (
+        <span className="absolute top-2 left-2 bg-xmas-red text-white text-[11px] font-bold px-2 py-1 rounded-full shadow">
+          {badge}
+        </span>
+      )}
+    </div>
+    <div className="p-3">
+      <h3 className="font-bold text-slate-800 text-sm leading-snug line-clamp-2 min-h-[2.4em]">{gift.title}</h3>
+      <div className="flex items-center justify-between mt-2 gap-2">
+        <span className="text-xs text-slate-500 truncate">{user ? `${user.avatar} ${user.name}` : ''}</span>
+        <span className="text-xs text-slate-500 whitespace-nowrap">
+          ❤️ {gift.likes || 0} · 💬 {gift.comments?.length || 0}
+        </span>
+      </div>
+    </div>
+  </button>
+);
+
 const App: React.FC = () => {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isEditingUser, setIsEditingUser] = useState(false);
@@ -438,11 +473,21 @@ const App: React.FC = () => {
   const [gifts, setGifts] = useState<Gift[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [highlights, setHighlights] = useState<{ recent: Gift[]; popular: Gift[] }>({ recent: [], popular: [] });
+  const [homeGallery, setHomeGallery] = useState<{ gifts: Gift[]; index: number } | null>(null);
+
+  const fetchHighlights = async () => {
+    const data = await api.getHighlights(8);
+    setHighlights(data);
+  };
 
   // Load users on mount
   useEffect(() => {
     fetchUsers();
+    fetchHighlights();
   }, []);
+
+  const userById = (id: string) => users.find((u) => u.id === id);
 
   const fetchUsers = async () => {
     const data = await api.getUsers();
@@ -587,7 +632,7 @@ const App: React.FC = () => {
   // --- Views ---
 
   const LandingPage = () => (
-    <div className="min-h-screen bg-xmas-red flex flex-col items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen bg-xmas-red flex flex-col items-center p-4 py-10 relative overflow-hidden">
       {/* Snowflakes decoration */}
       <div className="absolute top-10 left-10 w-4 h-4 bg-white rounded-full opacity-50 animate-bounce"></div>
       <div className="absolute top-20 right-20 w-3 h-3 bg-white rounded-full opacity-60 animate-pulse"></div>
@@ -632,7 +677,56 @@ const App: React.FC = () => {
           />
         )}
       </div>
-      <p className="text-white/80 mt-8 font-festive text-xl">🎄 Feliz Navidad y Próspero Año Nuevo 🎄</p>
+
+      {highlights.recent.length > 0 && (
+        <section className="mt-8 bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl border-4 border-xmas-gold p-5 md:p-7 w-full max-w-6xl">
+          <div className="flex items-baseline justify-between gap-3 mb-4">
+            <h2 className="font-festive text-3xl md:text-4xl text-xmas-red">Últimos regalos añadidos</h2>
+            <span className="text-xs md:text-sm text-slate-500 whitespace-nowrap">Recién salidos del horno</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+            {highlights.recent.map((gift, index) => (
+              <HighlightCard
+                key={gift.id}
+                gift={gift}
+                user={userById(gift.userId)}
+                badge="Nuevo"
+                onClick={() => setHomeGallery({ gifts: highlights.recent, index })}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {highlights.popular.length > 0 && (
+        <section className="mt-8 bg-white/95 backdrop-blur-sm rounded-3xl shadow-2xl border-4 border-xmas-gold p-5 md:p-7 w-full max-w-6xl">
+          <div className="flex items-baseline justify-between gap-3 mb-4">
+            <h2 className="font-festive text-3xl md:text-4xl text-xmas-red">Los más populares</h2>
+            <span className="text-xs md:text-sm text-slate-500 whitespace-nowrap">❤️ me gusta + 💬 comentarios</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+            {highlights.popular.map((gift, index) => (
+              <HighlightCard
+                key={gift.id}
+                gift={gift}
+                user={userById(gift.userId)}
+                badge={index === 0 ? '🔥 Top 1' : `#${index + 1}`}
+                onClick={() => setHomeGallery({ gifts: highlights.popular, index })}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      <p className="text-white/80 mt-8 font-festive text-xl text-center">🎄 Feliz Navidad y Próspero Año Nuevo 🎄</p>
+
+      {homeGallery && (
+        <ImageGalleryModal
+          gifts={homeGallery.gifts}
+          initialIndex={homeGallery.index}
+          onClose={() => setHomeGallery(null)}
+        />
+      )}
     </div>
   );
 
@@ -651,7 +745,7 @@ const App: React.FC = () => {
         <header className="bg-xmas-green text-white p-4 shadow-lg sticky top-0 z-50">
           <div className="max-w-6xl mx-auto flex items-center justify-between">
             <button
-              onClick={() => setSelectedUser(null)}
+              onClick={() => { setSelectedUser(null); fetchHighlights(); }}
               className="flex items-center gap-2 hover:bg-white/10 px-3 py-2 rounded-lg transition-colors"
             >
               <BackIcon />

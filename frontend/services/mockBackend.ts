@@ -51,6 +51,22 @@ export const api = {
     }
   },
 
+  getHighlights: async (limit = 8): Promise<{ recent: Gift[]; popular: Gift[] }> => {
+    try {
+      const response = await fetch(`${GIFTS_API_URL}/highlights?limit=${limit}`);
+      if (!response.ok) throw new Error('Failed to fetch highlights');
+      const data = await response.json();
+      const parse = (list: Gift[]) => (list || []).map(g => ({
+        ...g,
+        createdAt: typeof g.createdAt === 'string' ? new Date(g.createdAt).getTime() : g.createdAt
+      }));
+      return { recent: parse(data.recent), popular: parse(data.popular) };
+    } catch (error) {
+      console.error("API Error (getHighlights):", error);
+      return { recent: [], popular: [] };
+    }
+  },
+
   createGift: async (userId: string, imageData: string, title: string, description: string): Promise<Gift> => {
     const payload = {
       userId,

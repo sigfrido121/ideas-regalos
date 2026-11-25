@@ -5,6 +5,39 @@ import { randomUUID } from 'crypto';
 
 const router = express.Router();
 
+// GET home highlights: latest gifts + most popular (likes + comments)
+router.get('/highlights', async (req, res) => {
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 8, 1), 24);
+    try {
+        const recent = await Gift.find({}).sort({ createdAt: -1 }).limit(limit).lean();
+
+        const popular = await Gift.aggregate([
+            {
+                $addFields: {
+                    score: {
+                        $add: [
+                            { $ifNull: ['$likes', 0] },
+                            { $multiply: [{ $size: { $ifNull: ['$comments', []] } }, 2] },
+                            { $multiply: [{ $ifNull: ['$dislikes', 0] }, -1] },
+                        ],
+                    },
+                },
+            },
+            { $sort: { score: -1, createdAt: -1 } },
+            { $limit: limit },
+        ]);
+
+        const normalize = (g: any) => {
+            const { _id, score, ...rest } = g;
+            return { ...rest, id: String(_id), createdAt: g.createdAt };
+        };
+
+        res.json({ recent: recent.map(normalize), popular: popular.map(normalize) });
+    } catch (error) {
+        res.status(500).json({ message: 'Error fetching highlights', error });
+    }
+});
+
 // GET all gifts or filter by userId
 router.get('/', async (req, res) => {
     try {
