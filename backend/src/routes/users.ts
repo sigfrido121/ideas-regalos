@@ -19,13 +19,17 @@ const INITIAL_USERS = [
     { name: 'mascota2', avatar: '🐱', color: 'bg-gray-500' },
 ];
 
-// GET all users (seed if empty)
+// GET all users (seed if empty). Por defecto oculta los marcados como hidden.
 router.get('/', async (req, res) => {
     try {
-        let users = await User.find();
-        if (users.length === 0) {
+        const includeHidden = req.query.includeHidden === '1' || req.query.includeHidden === 'true';
+        const filter = includeHidden ? {} : { hidden: { $ne: true } };
+
+        let users = await User.find(filter);
+        const total = await User.estimatedDocumentCount();
+        if (total === 0) {
             await User.insertMany(INITIAL_USERS);
-            users = await User.find();
+            users = await User.find(filter);
         }
         res.json(users);
     } catch (error) {

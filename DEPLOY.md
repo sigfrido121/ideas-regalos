@@ -55,3 +55,16 @@ docker compose -f docker-compose.prod.yml ps
 docker exec ideas-regalos-backend wget -qO- http://127.0.0.1:5000/health
 docker logs --tail 50 ideas-regalos-backend
 ```
+
+## Usuarios ocultos
+
+Ocultar un usuario no borra nada: deja de aparecer en la app y sus regalos se conservan.
+
+```bash
+./usuarios.sh list                 # quién se ve y quién está oculto
+./usuarios.sh hide "Angelica"      # ocultar
+./usuarios.sh show "Angelica"      # volver a mostrarlo
+```
+
+La API respeta la visibilidad: `GET /api/users` devuelve solo los visibles,
+`GET /api/users?includeHidden=1` devuelve todos.
