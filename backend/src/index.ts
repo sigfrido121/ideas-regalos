@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 import giftRoutes from './routes/gifts';
 import userRoutes from './routes/users';
 import imageRoutes from './routes/images';
+import eventRoutes from './routes/events';
 
 dotenv.config();
 
@@ -20,6 +21,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use('/api/gifts', giftRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/images', imageRoutes);
+app.use('/api', eventRoutes); // /api/events y /api/stats
 
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', message: 'Server is running' });

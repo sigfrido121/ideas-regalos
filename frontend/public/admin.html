@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Regalitos · Panel</title>
+  <style>
+    :root { --verde:#165B33; --rojo:#D42426; --tinta:#0f172a; --gris:#64748b; --fondo:#f8fafc; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--fondo); color: var(--tinta); }
+    header { background: var(--verde); color:#fff; padding:16px 20px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+    header h1 { margin:0; font-size:18px; font-weight:600; }
+    header select { border:0; border-radius:8px; padding:8px 10px; font-size:14px; }
+    main { padding:20px; max-width:1100px; margin:0 auto; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap:12px; margin-bottom:20px; }
+    .card { background:#fff; border-radius:14px; padding:16px; box-shadow:0 1px 3px rgba(15,23,42,.08); }
+    .card .label { font-size:12px; color:var(--gris); text-transform:uppercase; letter-spacing:.04em; }
+    .card .value { font-size:28px; font-weight:700; margin-top:6px; }
+    .card .hint { font-size:12px; color:var(--gris); margin-top:4px; }
+    section { background:#fff; border-radius:14px; padding:16px; margin-bottom:16px; box-shadow:0 1px 3px rgba(15,23,42,.08); }
+    section h2 { margin:0 0 12px; font-size:15px; font-weight:600; }
+    .fila { display:flex; align-items:center; gap:10px; padding:6px 0; font-size:14px; }
+    .fila .nombre { flex:1; }
+    .barra { height:8px; background:#e2e8f0; border-radius:99px; flex:2; overflow:hidden; }
+    .barra > i { display:block; height:100%; background:var(--rojo); border-radius:99px; }
+    .fila .num { width:52px; text-align:right; color:var(--gris); font-variant-numeric: tabular-nums; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th, td { text-align:left; padding:6px 4px; border-bottom:1px solid #eef2f7; }
+    th { color:var(--gris); font-weight:500; font-size:12px; }
+    .muted { color:var(--gris); font-size:13px; }
+    .error { background:#fee2e2; color:#991b1b; padding:12px; border-radius:10px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🎁 Regalitos · Panel</h1>
+    <select id="rango">
+      <option value="1">Hoy</option>
+      <option value="7" selected>Últimos 7 días</option>
+      <option value="30">Últimos 30 días</option>
+      <option value="90">Últimos 90 días</option>
+    </select>
+  </header>
+  <main>
+    <div id="aviso"></div>
+    <div class="grid" id="tarjetas"></div>
+    <section>
+      <h2>Embudo de subida</h2>
+      <div id="embudo"></div>
+    </section>
+    <section>
+      <h2>Actividad por día</h2>
+      <table id="tabla-dias"><thead><tr><th>Día</th><th>Eventos</th><th>Regalos</th><th>Comentarios</th><th>Clics en enlaces</th></tr></thead><tbody></tbody></table>
+    </section>
+    <section>
+      <h2>Tiendas más clickeadas</h2>
+      <div id="enlaces"></div>
+    </section>
+  </main>
+  <script>
+    const el = (id) => document.getElementById(id);
+    const fmt = (n) => new Intl.NumberFormat('es-ES').format(n || 0);
+
+    function tarjeta(label, valor, pista) {
+      return `<div class="card"><div class="label">${label}</div><div class="value">${valor}</div>${pista ? `<div class="hint">${pista}</div>` : ''}</div>`;
+    }
+
+    function filaBarra(nombre, valor, max) {
+      const pct = max > 0 ? Math.max(2, Math.round((valor / max) * 100)) : 0;
+      return `<div class="fila"><span class="nombre">${nombre}</span><span class="barra"><i style="width:${pct}%"></i></span><span class="num">${fmt(valor)}</span></div>`;
+    }
+
+    async function cargar() {
+      const dias = el('rango').value;
+      el('aviso').innerHTML = '';
+      try {
+        const res = await fetch(`/api/stats?days=${dias}`, { credentials: 'same-origin' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const s = await res.json();
+
+        el('tarjetas').innerHTML = [
+          tarjeta('Visitantes', fmt(s.visitas.visitantes), `${fmt(s.visitas.sesiones)} sesiones`),
+          tarjeta('Tiempo medio', `${Math.round(s.tiempo.mediaSegundos / 60)} min`, 'por sesión'),
+          tarjeta('Regalos', fmt(s.acciones.regalos), 'creados en el período'),
+          tarjeta('Comentarios', fmt(s.acciones.comentarios), `${fmt(s.acciones.likes)} me gusta`),
+          tarjeta('Clics en enlaces', fmt(s.acciones.clics_enlaces), 'tiendas abiertas'),
+          tarjeta('Recurrentes', fmt(s.retencion.recurrentes), `${fmt(s.retencion.nuevos)} nuevos`),
+        ].join('');
+
+        const e = s.embudo;
+        const maxE = Math.max(e.eligieron_usuario, 1);
+        el('embudo').innerHTML = [
+          filaBarra('Eligieron usuario', e.eligieron_usuario, maxE),
+          filaBarra('Eligieron foto', e.eligieron_foto, maxE),
+          filaBarra('Empezaron a subir', e.empezaron_subida, maxE),
+          filaBarra('Regalo creado', e.subieron_regalo, maxE),
+        ].join('') + `<p class="muted">Conversión foto → regalo: ${e.eligieron_foto ? Math.round((e.subieron_regalo / e.eligieron_foto) * 100) : 0}%</p>`;
+
+        el('tabla-dias').querySelector('tbody').innerHTML = s.porDia.length
+          ? s.porDia.map((d) => `<tr><td>${d.dia}</td><td>${fmt(d.eventos)}</td><td>${fmt(d.regalos)}</td><td>${fmt(d.comentarios)}</td><td>${fmt(d.links)}</td></tr>`).join('')
+          : '<tr><td colspan="5" class="muted">Sin datos todavía</td></tr>';
+
+        const maxL = Math.max(...s.topEnlaces.map((l) => l.clicks), 1);
+        el('enlaces').innerHTML = s.topEnlaces.length
+          ? s.topEnlaces.map((l) => filaBarra(l.host, l.clicks, maxL)).join('')
+          : '<p class="muted">Todavía no hay clics en enlaces.</p>';
+      } catch (err) {
+        el('aviso').innerHTML = `<div class="error">No se pudieron cargar las estadísticas: ${err.message}</div>`;
+      }
+    }
+
+    el('rango').addEventListener('change', cargar);
+    cargar();
+  </script>
+</body>
+</html>

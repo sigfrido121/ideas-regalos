@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User, Gift } from './types';
 import { api, resizeImage } from './services/mockBackend';
 import { analyzeGiftImage } from './services/geminiService';
+import { initAnalytics, track } from './services/analytics';
 
 // --- Icons ---
 const BackIcon = () => (
@@ -136,6 +137,12 @@ const ImageGalleryModal: React.FC<{
     e?.stopPropagation();
     setCurrentIndex((prev) => (prev - 1 + gifts.length) % gifts.length);
   };
+
+  // Vista de regalo (para saber qué regalos se miran)
+  useEffect(() => {
+    const g = gifts[currentIndex];
+    if (g) track('gift_viewed', undefined, { giftId: g.id });
+  }, [currentIndex]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -639,6 +646,11 @@ const App: React.FC = () => {
     setHighlights(data);
   };
 
+  // Analítica (una sola vez por sesión)
+  useEffect(() => {
+    initAnalytics();
+  }, []);
+
   // Load users on mount
   useEffect(() => {
     fetchUsers();
@@ -651,6 +663,7 @@ const App: React.FC = () => {
   const openGiftInProfile = (gift: Gift) => {
     const owner = userById(gift.userId);
     if (!owner) return;
+    track('user_selected', { user: owner.name, from: 'highlight' });
     setGiftToOpen(gift.id);
     setSelectedUser(owner);
   };
@@ -740,6 +753,7 @@ const App: React.FC = () => {
     const fileArray = Array.from(files);
     // Reset value to allow uploading the same file again
     event.target.value = '';
+    track('upload_selected', { count: fileArray.length });
     setPendingFiles(fileArray);
   };
 
@@ -747,6 +761,7 @@ const App: React.FC = () => {
     if (!selectedUser) return;
     setIsUploading(true);
     setUploadProgress({ done: 0, total: fileArray.length });
+    track('upload_started', { count: fileArray.length, with_hint: hint ? 1 : 0 });
 
     try {
       const fallidas: string[] = [];
@@ -778,8 +793,10 @@ const App: React.FC = () => {
 
           // 3. Send to backend
           await api.createGift(selectedUser.id, resizedImage, title, description);
+          track('upload_succeeded');
         } catch (err) {
           console.error(`Error uploading file ${i}:`, err);
+          track('upload_failed', { reason: String((err as Error)?.message || err).slice(0, 80) });
           fallidas.push(file.name || `foto ${i + 1}`);
         }
         setUploadProgress({ done: i + 1, total: fileArray.length });
@@ -829,7 +846,7 @@ const App: React.FC = () => {
           {users.map((user) => (
             <button
               key={user.id}
-              onClick={() => setSelectedUser(user)}
+              onClick={() => { track('user_selected', { user: user.name }); setSelectedUser(user); }}
               className="group flex flex-col items-center p-2 rounded-xl transition-all duration-300 hover:bg-xmas-cream/50 active:scale-95"
             >
               <div className={`w-16 h-16 md:w-24 md:h-24 rounded-full ${user.color} flex items-center justify-center text-3xl md:text-5xl shadow-md mb-2 border-2 md:border-4 border-white group-hover:shadow-lg transition-transform group-hover:scale-110`}>

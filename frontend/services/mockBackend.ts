@@ -1,4 +1,5 @@
 import { Gift, User, Comment } from '../types';
+import { track } from './analytics';
 
 // API Configuration
 const USERS_API_URL = '/api/users';
@@ -101,6 +102,7 @@ export const api = {
     });
 
     if (!response.ok) throw new Error('Failed to create gift');
+    track('gift_created');
     const newGift = await response.json();
     return {
       ...newGift,
@@ -125,6 +127,7 @@ export const api = {
     });
 
     if (!response.ok) throw new Error('Failed to add comment');
+    track('comment_added');
     return await response.json();
   },
 
@@ -135,6 +138,7 @@ export const api = {
       body: JSON.stringify({ userId, action })
     });
     if (!response.ok) throw new Error('Failed to update interaction');
+    track(action);
     const updatedGift = await response.json();
     return {
       ...updatedGift,
