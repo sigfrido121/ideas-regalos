@@ -265,6 +265,48 @@ const EditUserModal: React.FC<{
   )
 }
 
+// Convierte los enlaces que aparezcan en un comentario en links que abren en otra pestaña
+const linkify = (text: string): React.ReactNode => {
+  if (!text) return text;
+
+  const re = /((?:https?:\/\/|www\.)[^\s<>"']+)/gi;
+  const nodes: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = re.exec(text)) !== null) {
+    const raw = match[0];
+    // La puntuación final no forma parte del enlace
+    const trailingMatch = raw.match(/[.,;:!?)\]]+$/);
+    const trailing = trailingMatch ? trailingMatch[0] : '';
+    const clean = trailing ? raw.slice(0, -trailing.length) : raw;
+
+    if (match.index > lastIndex) nodes.push(text.slice(lastIndex, match.index));
+
+    // Solo http(s): nada de javascript: ni otros esquemas
+    const href = /^https?:\/\//i.test(clean) ? clean : `https://${clean}`;
+    nodes.push(
+      <a
+        key={`${match.index}-${clean}`}
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer nofollow"
+        onClick={(e) => e.stopPropagation()}
+        className="text-xmas-green font-medium underline underline-offset-2 break-all hover:text-green-700"
+      >
+        {clean}
+      </a>
+    );
+
+    if (trailing) nodes.push(trailing);
+    lastIndex = match.index + raw.length;
+  }
+
+  if (lastIndex === 0) return text;
+  if (lastIndex < text.length) nodes.push(text.slice(lastIndex));
+  return nodes;
+};
+
 const GiftCard: React.FC<{
   gift: Gift;
   currentUser: User;
@@ -398,7 +440,7 @@ const GiftCard: React.FC<{
                   </div>
                   <div className="bg-white p-2 rounded-r-lg rounded-bl-lg shadow-sm text-sm border border-slate-100 flex-1">
                     <span className="font-bold text-slate-700 block text-xs">{author?.name || 'Desconocido'}</span>
-                    <span className="text-slate-600">{comment.text}</span>
+                    <span className="text-slate-600">{linkify(comment.text)}</span>
                   </div>
                 </div>
               )
