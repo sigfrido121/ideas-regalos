@@ -67,6 +67,22 @@ export const api = {
     }
   },
 
+  // Convierte en el servidor las fotos que el navegador no puede leer (HEIC/HEIF, gigantes)
+  normalizeImage: async (file: File): Promise<string> => {
+    const base64 = await fileToBase64(file);
+    const response = await fetch('/api/images/normalize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageData: base64, mimeType: file.type, fileName: file.name })
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.message || 'No se pudo procesar la imagen');
+    }
+    const data = await response.json();
+    return data.imageData;
+  },
+
   createGift: async (userId: string, imageData: string, title: string, description: string): Promise<Gift> => {
     const payload = {
       userId,
@@ -142,25 +158,84 @@ export const api = {
 };
 
 // Helper function remains useful for image processing
-export const resizeImage = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target?.result as string;
-      img.onload = () => {
+export const resizeImage = (file: File, maxSide = 900): Promise<string> => {
+  return new Promise(async (resolve, reject) => {
+    // 1) Camino rápido: el navegador decodifica a tamaño reducido (evita colgarse con fotos de 100+ MP)
+    if (typeof createImageBitmap === 'function') {
+      try {
+        const bitmap = await createImageBitmap(file, { resizeWidth: maxSide, resizeQuality: 'medium' });
+
+        // Si el lado vertical sigue siendo enorme (foto vertical), re-escalamos
+        const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 600;
-        const scaleSize = Math.min(1, MAX_WIDTH / img.width);
-        canvas.width = img.width * scaleSize;
-        canvas.height = img.height * scaleSize;
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+
         const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', 0.6)); // Compress to 60% quality
-      };
-      img.onerror = (err) => reject(err);
+        if (!ctx) throw new Error('Sin canvas 2d');
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        if ('close' in bitmap) (bitmap as ImageBitmap).close();
+
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+        return;
+      } catch (e) {
+        // Formatos que el navegador no sabe leer (HEIC de Samsung/iPhone): seguimos al fallback
+        console.warn('createImageBitmap falló, probando <img>', e);
+      }
+    }
+
+    // 2) Fallback clásico con <img>, con timeout para no quedar colgado
+    let objectUrl: string | null = null;
+    let timer: number | undefined;
+    const limpiar = () => {
+      if (timer) window.clearTimeout(timer);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-    reader.onerror = (err) => reject(err);
+
+    try {
+      objectUrl = URL.createObjectURL(file);
+      const img = new Image();
+
+      timer = window.setTimeout(() => {
+        limpiar();
+        reject(new Error('timeout al leer la imagen'));
+      }, 20000);
+
+      img.onload = () => {
+        try {
+          const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(img.width * scale));
+          canvas.height = Math.max(1, Math.round(img.height * scale));
+          const ctx = canvas.getContext('2d');
+          if (!ctx) throw new Error('Sin canvas 2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
+          limpiar();
+          resolve(dataUrl);
+        } catch (err) {
+          limpiar();
+          reject(err);
+        }
+      };
+
+      img.onerror = () => {
+        limpiar();
+        reject(new Error('el navegador no puede decodificar esta imagen'));
+      };
+
+      img.src = objectUrl;
+    } catch (err) {
+      limpiar();
+      reject(err);
+    }
   });
 };
+
+const fileToBase64 = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('no se pudo leer el archivo'));
+    reader.readAsDataURL(file);
+  });

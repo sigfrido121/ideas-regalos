@@ -514,15 +514,37 @@ const UploadHintModal: React.FC<{
   // El estado vive acá adentro: así escribir no re-renderiza el árbol de App
   // (si viviera arriba, cada tecla remontaba el modal y se cerraba el teclado).
   const [hint, setHint] = useState('');
-  const [previews, setPreviews] = useState<string[]>([]);
+  // Miniaturas: se generan decodificando a 160 px. Un <img src=blob> con una foto de
+  // 100+ MP obliga al navegador a decodificarla entera y congela la pestaña.
+  const [previews, setPreviews] = useState<{ url: string; failed?: boolean }[]>([]);
 
   useEffect(() => {
-    const urls = files.slice(0, 3).map((f) => URL.createObjectURL(f));
-    setPreviews(urls);
+    let cancelado = false;
     document.body.style.overflow = 'hidden';
+
+    (async () => {
+      const out: { url: string; failed?: boolean }[] = [];
+      for (const f of files.slice(0, 3)) {
+        try {
+          const bmp = await createImageBitmap(f, { resizeWidth: 160, resizeQuality: 'low' });
+          const scale = Math.min(1, 160 / Math.max(bmp.width, bmp.height));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.max(1, Math.round(bmp.width * scale));
+          canvas.height = Math.max(1, Math.round(bmp.height * scale));
+          canvas.getContext('2d')!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+          if ('close' in bmp) (bmp as ImageBitmap).close();
+          out.push({ url: canvas.toDataURL('image/jpeg', 0.6) });
+        } catch {
+          // HEIC y otros formatos que el navegador no decodifica: el servidor los procesa al subir
+          out.push({ url: '', failed: true });
+        }
+      }
+      if (!cancelado) setPreviews(out);
+    })();
+
     return () => {
+      cancelado = true;
       document.body.style.overflow = '';
-      urls.forEach((u) => URL.revokeObjectURL(u));
     };
   }, [files]);
 
@@ -543,9 +565,15 @@ const UploadHintModal: React.FC<{
 
         {previews.length > 0 && (
           <div className="flex gap-2 mt-2 mb-4">
-            {previews.map((src, i) => (
-              <img key={src} src={src} alt={`Vista previa ${i + 1}`} className="w-16 h-16 object-cover rounded-xl border border-slate-200" />
-            ))}
+            {previews.map((p, i) =>
+              p.failed ? (
+                <div key={i} title="Se convertirá al subir" className="w-16 h-16 rounded-xl border border-slate-200 bg-slate-100 flex items-center justify-center text-xl">
+                  🖼️
+                </div>
+              ) : (
+                <img key={i} src={p.url} alt={`Vista previa ${i + 1}`} className="w-16 h-16 object-cover rounded-xl border border-slate-200" />
+              )
+            )}
             {files.length > previews.length && (
               <div className="w-16 h-16 rounded-xl bg-slate-100 text-slate-500 text-sm font-bold flex items-center justify-center">
                 +{files.length - previews.length}
@@ -721,11 +749,20 @@ const App: React.FC = () => {
     setUploadProgress({ done: 0, total: fileArray.length });
 
     try {
+      const fallidas: string[] = [];
+
       for (let i = 0; i < fileArray.length; i++) {
         const file = fileArray[i] as File;
         try {
-          // 1. Resize/Compress Image on client side
-          const resizedImage = await resizeImage(file);
+          // 1. Resize/Compress on client; si el navegador no puede (HEIC de Samsung/iPhone,
+          //    fotos de 100+ MP) lo convierte el backend.
+          let resizedImage: string;
+          try {
+            resizedImage = await resizeImage(file);
+          } catch (decodeError) {
+            console.warn('El navegador no pudo procesar la foto, probando en el servidor', decodeError);
+            resizedImage = await api.normalizeImage(file);
+          }
 
           // 2. Analyze with AI, passing the optional hint
           let title = "Nuevo Regalo";
@@ -743,8 +780,16 @@ const App: React.FC = () => {
           await api.createGift(selectedUser.id, resizedImage, title, description);
         } catch (err) {
           console.error(`Error uploading file ${i}:`, err);
+          fallidas.push(file.name || `foto ${i + 1}`);
         }
         setUploadProgress({ done: i + 1, total: fileArray.length });
+      }
+
+      if (fallidas.length > 0) {
+        alert(
+          `No se pudieron subir ${fallidas.length} foto(s):\n${fallidas.join('\n')}\n\n` +
+          `Si son fotos HEIC del móvil, probá desactivar "Fotos de alta eficiencia" en la cámara o convertirlas a JPG.`
+        );
       }
 
       await loadGifts(selectedUser.id);
