@@ -14,7 +14,7 @@ export interface IEvent extends Document {
 
 const EventSchema: Schema = new Schema({
     type: { type: String, required: true, index: true },
-    ts: { type: Date, default: Date.now, index: true },
+    ts: { type: Date, default: Date.now },
     sessionId: { type: String, required: true, index: true },
     visitorId: { type: String, index: true },
     userId: { type: String, index: true },
